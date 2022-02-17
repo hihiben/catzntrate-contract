@@ -34,6 +34,15 @@
   "name": "catzntrate",
   "version": "1.0.0",
   "main": "hardhat.config.ts",
+  "scripts": {
+    "test": "yarn build && scripts/test.sh",
+    "build": "scripts/build.sh",
+    "check-compile": "scripts/check.sh",
+    "compile": "npx hardhat compile",
+    "lint:solhint": "solhint \"contracts/**/*.sol\"",
+    "lint:prettier": "scripts/prettier.sh",
+    "deploy": "scripts/deploy.sh"
+  },
   "author": "",
   "license": "MIT",
   "dependencies": {
