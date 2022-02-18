@@ -2,8 +2,9 @@
 pragma solidity ^0.8.0;
 
 import "@pooltogether/uniform-random-number/contracts/UniformRandomNumber.sol";
-
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {SafeERC20, IERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
 import {LibGene} from "./libs/LibGene.sol";
 import {ICatzntrate} from "./interfaces/ICatzntrate.sol";
 import {ICatz} from "./interfaces/ICatz.sol";
@@ -12,63 +13,49 @@ import {ICatz} from "./interfaces/ICatz.sol";
 
 contract CatzBreed is Ownable {
     using LibGene for bytes32;
-    // TODO: 紀錄 cat parent
-    // TODO: 決定基因
-    // TODO: breeding()
-    // TODO: mon()
-    // TODO: dad()
-
-    // enum State {
-    //     Invalid,
-    //     Idle,
-    //     Working,
-    //     Waiting,
-    //     Resting,
-    //     End
-    // }
+    using SafeERC20 for IERC20;
 
     struct CatzBreedingInfo {
         uint256 monId;
         uint256 dadId;
-        uint256[] kids;
         uint8 breedingCount;
         uint256 lastBreeding;
-        uint256 birthTimestamp;
+        uint256[] kids;
     }
 
     uint256 constant genderMaleDenominator = 10**4;
 
     uint8 public breedingLimit;
     uint8 public breedingLevel;
-    uint8 public monBreedingCost;
-    uint8 public dadBreedingCost;
+    uint256 public monBreedingCost;
+    uint256 public dadBreedingCost;
     uint8 public maleNumerator;
     uint8 public breedingColdDown;
 
     mapping(uint256 => CatzBreedingInfo) public catzBreedingInfo;
+    IERC20 public cft;
     ICatz public catz;
     ICatzntrate public catzntrate;
 
     constructor(
+        IERC20 _cft,
         ICatz _catz,
         ICatzntrate _catzntrate,
         uint8 _breedingLimit,
-        uint8 _breedingLevel,
-        uint8 _monBreedingCost,
-        uint8 _dadBreedingCost,
-        uint8 _maleNumerator,
-        uint8 _breedingColdDown
+        uint8 _breedingLevel
     ) {
         catz = _catz;
         catzntrate = _catzntrate;
+        cft = _cft;
         breedingLimit = _breedingLimit;
         breedingLevel = _breedingLevel;
-        monBreedingCost = _monBreedingCost;
-        dadBreedingCost = _dadBreedingCost;
-        maleNumerator = _maleNumerator;
-        breedingColdDown = _breedingColdDown;
+        monBreedingCost = 100 * 10**18;
+        dadBreedingCost = 50 * 10**18;
+        maleNumerator = 30;
+        breedingColdDown = 0;
     }
 
+    // update setting
     function setBreedingLimit(uint8 _breedingLimit) external onlyOwner {
         breedingLimit = _breedingLimit;
     }
@@ -77,15 +64,15 @@ contract CatzBreed is Ownable {
         breedingLevel = _breedingLevel;
     }
 
-    function mon(uint256 id) external view returns (uint256) {
-        return catzBreedingInfo[id].monId;
+    function setMonBreedingCost(uint256 cost) external onlyOwner {
+        monBreedingCost = cost;
     }
 
-    function dad(uint256 id) external view returns (uint256) {
-        return catzBreedingInfo[id].dadId;
+    function setDadBreedingCost(uint256 cost) external onlyOwner {
+        dadBreedingCost = cost;
     }
 
-    function breedingNewCatz(uint256 monId, uint256 dadId) external {
+    function breedNewCatz(uint256 monId, uint256 dadId) external {
         // check cat existed
         require(catz.isValidCatz(monId), "mon cat doesn't exist");
         require(catz.isValidCatz(dadId), "dad cat doesn't exist");
@@ -94,11 +81,10 @@ contract CatzBreed is Ownable {
         require(catz.ownerOf(monId) == msg.sender, "wrong owner of mon cat");
         require(catz.ownerOf(dadId) == msg.sender, "wrong owner of dad cat");
 
-        // get cat from id
         // check gender of parent id
         ICatz.CatzInfo memory monCatzGene = catz.catzs(monId);
         ICatz.CatzInfo memory dadCatzGene = catz.catzs(dadId);
-        require(monCatzGene.gene.gender(), "wrong gender of mon");
+        require(!monCatzGene.gene.gender(), "wrong gender of mon");
         require(dadCatzGene.gene.gender(), "wrong gender of dad");
 
         // check level
@@ -126,8 +112,8 @@ contract CatzBreed is Ownable {
         );
 
         // calc token paid
-        uint256 consumingTokenAmount = calcBreedingCost(monId, dadId);
-        // TODO: transferFrom token from msg.sender account
+        uint256 cftCost = calcBreedingCost(monId, dadId);
+        cft.safeTransferFrom(msg.sender, address(this), cftCost);
 
         // decide factor for new cat
         bytes32 gene = genGeneFactors(monId, dadId, monCatzGene, dadCatzGene);
@@ -135,7 +121,7 @@ contract CatzBreed is Ownable {
         // mint new cat for sender
         uint256 kidId = catz.breedCatz(gene, msg.sender);
 
-        // TODO: update breeding info
+        // update breeding info
         monBreedingInfo.lastBreeding = block.timestamp;
         dadBreedingInfo.lastBreeding = block.timestamp;
         monBreedingInfo.breedingCount++;
@@ -146,9 +132,6 @@ contract CatzBreed is Ownable {
         // Update kid breeding information
         catzBreedingInfo[kidId].monId = monId;
         catzBreedingInfo[kidId].dadId = dadId;
-        catzBreedingInfo[kidId].birthTimestamp = block.timestamp;
-
-        // TODO: design
     }
 
     function calcBreedingCost(uint256 monId, uint256 dadId)
@@ -160,8 +143,8 @@ contract CatzBreed is Ownable {
         CatzBreedingInfo memory dadBreedingInfo = catzBreedingInfo[dadId];
 
         return
-            (monBreedingInfo.breedingCount * monBreedingCost) +
-            (dadBreedingInfo.breedingCount * dadBreedingCost);
+            (monBreedingInfo.breedingCount + 1 * monBreedingCost) +
+            (dadBreedingInfo.breedingCount + 1 * dadBreedingCost);
     }
 
     function genGeneFactors(
@@ -170,10 +153,7 @@ contract CatzBreed is Ownable {
         ICatz.CatzInfo memory monCatzGene,
         ICatz.CatzInfo memory dadCatzGene
     ) internal view returns (bytes32 gene) {
-        // 跟 mon 和 dad 的體質有關
-        // 希望跟 level 有關，可以有爆集的機率
-
-        // gender 應該是 male:3 female:7
+        // gender
         bool gender = calcGender(monId, dadId, "gender");
 
         // efficiency
@@ -220,8 +200,8 @@ contract CatzBreed is Ownable {
         uint256 dadId,
         string memory prefix
     ) internal view returns (bool) {
-        // 0: male
-        // 1: female
+        // 0: female
+        // 1: male
 
         uint256 randomNumber = getRandomNumber(
             monId,
@@ -233,9 +213,9 @@ contract CatzBreed is Ownable {
         if (
             calcRandomValue(randomNumber, genderMaleDenominator) < maleNumerator
         ) {
-            return false; // male
+            return false; // female
         } else {
-            return true; // female
+            return true; // male
         }
     }
 
