@@ -10,7 +10,6 @@ contract Catzntrate {
     using LibGene for bytes32;
 
     enum State {
-        Invalid,
         Idle,
         Working,
         Waiting,
@@ -22,9 +21,10 @@ contract Catzntrate {
     struct CatzInfo {
         State state;
         uint256 level;
+        uint256 exp;
         uint256 skillPoint;
         uint256 energy;
-        uint256 saturation;
+        uint256 hunger;
         bool rewardCgt;
         CatzAttr attr;
         uint256 counterStart;
@@ -41,6 +41,9 @@ contract Catzntrate {
 
     // constants
     uint256 private constant _LEVEL_MAX = 30;
+    uint256 private constant _EXP_BASE = 50;
+    uint256 private constant _EXP_UP = 25;
+    uint256 private constant _SKILL_POINTS_UP = 4;
 
     // storage
     mapping(uint256 => CatzInfo) public catzInfos;
@@ -133,13 +136,6 @@ contract Catzntrate {
         rewardCgtMultiplier = 1;
         workTime = 25 * 60;
         restTime = 5 * 60;
-    }
-
-    function catzIs(uint256 id) external view returns (State) {
-        State state = catzInfos[id].state;
-        require(state != State.Invalid && state < State.End, "Invalid");
-
-        return state;
     }
 
     function workStart(uint256 id, uint256 timestamp)
@@ -235,7 +231,20 @@ contract Catzntrate {
         whenNotState(id, State.Working)
         isValidCatz(id)
         isOwner(id)
-    {}
+    {
+        CatzInfo storage catzInfo = catzInfos[id];
+        require(catzInfo.exp == _getLevelExp(id), "exp insufficient");
+        if (catzInfo.level < _LEVEL_MAX) {
+            catzInfo.level++;
+            catzInfo.exp = 0;
+            catzInfo.skillPoint += _SKILL_POINTS_UP;
+        }
+    }
+
+    function _getLevelExp(uint256 id) internal view returns (uint256) {
+        uint256 level = catzInfos[id].level;
+        return _EXP_BASE + ((_EXP_UP * level) / 2);
+    }
 
     function getStats(uint256 id)
         public
@@ -253,6 +262,27 @@ contract Catzntrate {
         curiosity = gene.curiosity() + catzAttr.cur * curMultiplier;
         luck = gene.luck() + catzAttr.luk * lukMultiplier;
         vitality = gene.vitality() + catzAttr.vit * vitMultiplier;
+    }
+
+    function getStates(uint256 id)
+        external
+        view
+        returns (
+            State state,
+            uint256 level,
+            uint256 skillPoint,
+            uint256 energy,
+            uint256 hunger
+        )
+    {
+        CatzInfo memory catzInfo = catzInfos[id];
+        return (
+            catzInfo.state,
+            catzInfo.level,
+            catzInfo.skillPoint,
+            catzInfo.energy,
+            catzInfo.hunger
+        );
     }
 
     function addStats(
