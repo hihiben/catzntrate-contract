@@ -53,7 +53,8 @@ contract Catzntrate {
     uint256 public curMultiplier;
     uint256 public lukMultiplier;
     uint256 public vitMultiplier;
-    uint256 public rewardMultiplier;
+    uint256 public rewardCftMultiplier;
+    uint256 public rewardCgtMultiplier;
 
     // event
     event WorkStarted(uint256 id, uint256 timestamp);
@@ -128,7 +129,8 @@ contract Catzntrate {
         curMultiplier = 1;
         lukMultiplier = 1;
         vitMultiplier = 1;
-        rewardMultiplier = 1;
+        rewardCftMultiplier = 100;
+        rewardCgtMultiplier = 1;
         workTime = 25 * 60;
         restTime = 5 * 60;
     }
@@ -167,7 +169,11 @@ contract Catzntrate {
         CatzInfo storage catzInfo = catzInfos[id];
         catzInfo.counter -= timePassed;
         catzInfo.state = State.Waiting;
-        catzInfo.rewardDebt = _calReward(eff, timePassed, rewardMultiplier);
+        catzInfo.rewardDebt = _calReward(
+            eff,
+            timePassed,
+            catzInfo.rewardCgt ? rewardCgtMultiplier : rewardCftMultiplier
+        );
     }
 
     function workUnpause(uint256 id, uint256 timestamp)
@@ -208,8 +214,11 @@ contract Catzntrate {
         uint256 reward = catzInfo.rewardDebt;
         catzInfo.rewardDebt = 0;
         // Send reward
-
-        cft.mint(msg.sender, reward);
+        if (catzInfo.rewardCgt) {
+            cgt.mint(msg.sender, reward);
+        } else {
+            cft.mint(msg.sender, reward);
+        }
     }
 
     function feed(uint256 id, uint256 timestamp)
@@ -298,7 +307,9 @@ contract Catzntrate {
                 catzInfo.rewardDebt = _calReward(
                     efficiency,
                     catzInfo.counter,
-                    rewardMultiplier
+                    catzInfo.rewardCgt
+                        ? rewardCgtMultiplier
+                        : rewardCftMultiplier
                 );
                 catzInfo.counterStart += catzInfo.counter;
                 catzInfo.counter = restTime;

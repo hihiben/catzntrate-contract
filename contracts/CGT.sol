@@ -8,9 +8,6 @@ contract CGT is ERC20, Ownable {
     // Storage
     mapping(address => bool) public minters;
 
-    // Constant
-    uint256 private constant TOKEN_AMOUNT = 1 * 1e6 * 1e18;
-
     // Event
     event MinterAdded(address minter);
     event MinterRemoved(address minter);
@@ -20,9 +17,7 @@ contract CGT is ERC20, Ownable {
         _;
     }
 
-    constructor() ERC20("Catz Governance Token", "CGT") {
-        _mint(msg.sender, TOKEN_AMOUNT);
-    }
+    constructor() ERC20("Catz Governance Token", "CGT") {}
 
     function addMinter(address minter) external onlyOwner {
         require(!minters[minter], "Already minter");
