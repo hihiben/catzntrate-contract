@@ -41,10 +41,14 @@ contract Catz is ERC721, Ownable {
 
     constructor() ERC721("Catz", "CATZ") {}
 
-    function getCatz(uint256 id) external view returns (bytes32 gene, uint256 birthday) {
+    function getCatz(uint256 id)
+        external
+        view
+        returns (bytes32 gene, uint256 birthday)
+    {
         CatzInfo storage info = catzs[id];
         return (info.gene, info.birthday);
-    } 
+    }
 
     function addBreeder(address breeder) external onlyOwner {
         require(breeders[breeder] == false, "Already breeder");
@@ -60,8 +64,12 @@ contract Catz is ERC721, Ownable {
         emit BreederRemoved(breeder);
     }
 
-    function breedCatz(bytes32 gene, address to) external onlyBreeder {
-        uint256 id = catzs.length;
+    function breedCatz(bytes32 gene, address to)
+        external
+        onlyBreeder
+        returns (uint256 id)
+    {
+        id = catzs.length;
         catzs.push(CatzInfo(gene, block.timestamp));
         _safeMint(to, id);
 
