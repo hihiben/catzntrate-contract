@@ -13,7 +13,14 @@ library LibGene {
     bytes32 private constant _GENDER_MASK =
         0x0000000000000000800000000000000000000000000000000000000000000000;
 
+    uint256 private constant _EFFICIENCY_OFFSET = 0;
+    uint256 private constant _CURIOSITY_OFFSET = 8;
+    uint256 private constant _LUCK_OFFSET = 16;
+    uint256 private constant _VITALITY_OFFSET = 24;
+
     function gender(bytes32 gene) internal pure returns (bool) {
+        // false: male
+        // true: female
         return (gene & _GENDER_MASK) != 0;
     }
 
@@ -47,5 +54,20 @@ library LibGene {
 
     function wVitality(bytes32 gene) internal pure returns (uint8) {
         return uint8(gene[_VIT_W_INDEX]);
+    }
+
+    function genGene(
+        bytes32 gene,
+        bool _gender,
+        uint8 _efficiency,
+        uint8 _curiosity,
+        uint8 _luck,
+        uint8 _vitality
+    ) internal pure returns (bytes32) {
+        gene = gene | bytes1(_efficiency);
+        gene = gene | (bytes32(bytes1(_curiosity)) >> (_CURIOSITY_OFFSET * 8));
+        gene = gene | (bytes32(bytes1(_luck)) >> (_LUCK_OFFSET * 8));
+        gene = gene | (bytes32(bytes1(_vitality)) >> ((_VITALITY_OFFSET) * 8));
+        return _gender ? gene | _GENDER_MASK : gene;
     }
 }

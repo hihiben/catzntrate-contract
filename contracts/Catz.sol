@@ -12,7 +12,7 @@ contract Catz is ERC721, Ownable {
     }
 
     // Storage
-    CatzInfo[] private catzs;
+    CatzInfo[] public catzs;
 
     mapping(address => bool) public breeders;
 
