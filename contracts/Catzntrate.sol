@@ -130,18 +130,24 @@ contract Catzntrate {
     }
 
     modifier updateState(uint256 id, uint256 timestamp) {
+        if (catzInfos[id].lastRefillTime == 0) {
+            _initialize(id);
+        }
         _refillEnergy(id, timestamp);
         _updateState(id, timestamp);
         _;
     }
 
-    function _refillEnergy(uint256 id, uint256 timestamp) internal {
+    function _initialize(uint256 id) internal {
         (, uint256 birthday) = catz.getCatz(id);
+        catzInfos[id].lastRefillTime = birthday;
+        catzInfos[id].lastEatTime = birthday;
+    }
+
+    function _refillEnergy(uint256 id, uint256 timestamp) internal {
         CatzInfo storage catzInfo = catzInfos[id];
         uint256 timeInterval = timestamp - catzInfo.lastRefillTime;
-        if (catzInfo.lastRefillTime == 0) {
-            catzInfo.lastRefillTime = birthday;
-        } else if (timeInterval > _ENERGY_REFILL_TIME) {
+        if (timeInterval > _ENERGY_REFILL_TIME) {
             catzInfo.energy = 0;
             uint256 remain = timeInterval % _ENERGY_REFILL_TIME;
             catzInfo.lastRefillTime = timestamp - remain;
@@ -383,6 +389,10 @@ contract Catzntrate {
             require(catzInfo.level.level == 29, "Level too low");
         }
         catzInfo.rewardCgt = flag;
+    }
+
+    function poke(uint256 id) external updateState(id, block.timestamp) {
+        return;
     }
 
     // Internals
