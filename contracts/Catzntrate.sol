@@ -46,12 +46,21 @@ contract Catzntrate {
         uint256 vit;
     }
 
+    struct UserInfo {
+        uint256 level;
+        uint256 earning;
+    }
+
     // constants
+    uint256 private constant _TIME_BASE = 1645261200;
     uint256 private constant _LEVEL_MAX = 30;
     uint256 private constant _EXP_BASE = 50;
     uint256 private constant _EXP_UP = 25;
     uint256 private constant _SKILL_POINTS_UP = 4;
-    uint256 private constant _HUNGER_LIMIT = 100;
+    uint256 private constant _HUNGER_LIMIT_BASE = 100;
+    uint256 private constant _EARN_LIMIT_BASE = 50;
+    uint256 private constant _EARN_LEVEL = 3;
+    uint256 private constant _EARN_LIMIT_UP = 10;
     uint256 private constant _ENERGY_MAX = 50;
     uint256 private constant _NORMAL_EAT_TIME = 40 * 60;
     uint256 private constant _WORK_EAT_TIME = 5 * 60;
@@ -60,6 +69,7 @@ contract Catzntrate {
 
     // storage
     mapping(uint256 => CatzInfo) public catzInfos;
+    mapping(address => UserInfo) public userInfos;
     ICatz public catz;
     ICFT public cft;
     ICGT public cgt;
@@ -72,6 +82,7 @@ contract Catzntrate {
     uint256 public vitMultiplier;
     uint256 public rewardCftMultiplier;
     uint256 public rewardCgtMultiplier;
+    uint256 public speedUp;
 
     // event
     event WorkStarted(uint256 id, uint256 timestamp);
@@ -139,9 +150,10 @@ contract Catzntrate {
     }
 
     function _initialize(uint256 id) internal {
-        (, uint256 birthday) = catz.getCatz(id);
-        catzInfos[id].lastRefillTime = birthday;
-        catzInfos[id].lastEatTime = birthday;
+        uint256 time = block.timestamp -
+            ((block.timestamp - _TIME_BASE) % _ENERGY_REFILL_TIME);
+        catzInfos[id].lastRefillTime = time;
+        catzInfos[id].lastEatTime = time;
     }
 
     function _refillEnergy(uint256 id, uint256 timestamp) internal {
@@ -149,6 +161,7 @@ contract Catzntrate {
         uint256 timeInterval = timestamp - catzInfo.lastRefillTime;
         if (timeInterval > _ENERGY_REFILL_TIME) {
             catzInfo.energy = 0;
+            userInfos[msg.sender].earning = 0;
             uint256 remain = timeInterval % _ENERGY_REFILL_TIME;
             catzInfo.lastRefillTime = timestamp - remain;
         }
@@ -172,6 +185,7 @@ contract Catzntrate {
         rewardCgtMultiplier = 1;
         workTime = 25 * 60;
         restTime = 5 * 60;
+        speedUp = 1;
     }
 
     // Getters
@@ -217,9 +231,19 @@ contract Catzntrate {
         );
     }
 
-    function getHungerLimit(uint256 id) internal view returns (uint256) {
+    function getHungerLimit(uint256 id) public view returns (uint256) {
         (, , , uint256 vit) = getStats(id);
-        return vit + _HUNGER_LIMIT;
+        return vit + _HUNGER_LIMIT_BASE;
+    }
+
+    function getEarnLimit(address user) public view returns (uint256) {
+        uint256 level = userInfos[user].level;
+        return ((level / _EARN_LEVEL) * _EARN_LIMIT_UP) + _EARN_LIMIT_BASE;
+    }
+
+    // Testing usage
+    function setSpeedUp(uint256 rate) external {
+        speedUp = rate;
     }
 
     // Actions
@@ -299,6 +323,9 @@ contract Catzntrate {
         CatzInfo storage catzInfo = catzInfos[id];
         catzInfo.state = State.Petting;
         uint256 reward = catzInfo.rewardDebt;
+        uint256 left = getEarnLimit(msg.sender) - userInfos[msg.sender].earning;
+        reward = reward < left ? reward : left;
+
         catzInfo.rewardDebt = 0;
         // Send reward
         if (catzInfo.rewardCgt) {
@@ -348,6 +375,8 @@ contract Catzntrate {
             catzLevel.level++;
             catzLevel.exp = 0;
             catzLevel.skillPoint += _SKILL_POINTS_UP;
+            // Level up user
+            userInfos[msg.sender].level++;
         }
     }
 
@@ -475,16 +504,17 @@ contract Catzntrate {
         uint256 timestamp,
         uint256 eatSpeed
     ) internal returns (uint256 eatTime) {
+        uint256 finalSpeed = eatSpeed / speedUp;
         CatzInfo storage catzInfo = catzInfos[id];
         uint256 limit = getHungerLimit(id);
-        uint256 eat = (timestamp - catzInfo.lastEatTime) / eatSpeed;
+        uint256 eat = (timestamp - catzInfo.lastEatTime) / finalSpeed;
         uint256 food = limit - catzInfo.hunger;
         if (food > eat) {
             catzInfo.hunger += eat;
-            eatTime = eat * eatSpeed;
+            eatTime = eat * finalSpeed;
         } else {
             catzInfo.hunger = limit;
-            eatTime = food * eatSpeed;
+            eatTime = food * finalSpeed;
         }
         catzInfo.lastEatTime = timestamp;
     }
