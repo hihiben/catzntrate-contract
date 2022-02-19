@@ -24,9 +24,27 @@ contract CatzFood is ERC20, Ownable {
         price = _price;
     }
 
+    function addMinter(address minter) external onlyOwner {
+        require(!minters[minter], "Already minter");
+        minters[minter] = true;
+
+        emit MinterAdded(minter);
+    }
+
+    function removeMinter(address minter) external onlyOwner {
+        require(minters[minter], "Not minter");
+        minters[minter] = false;
+
+        emit MinterRemoved(minter);
+    }
+
     function buy(address to, uint256 amount) external {
         uint256 cost = amount * price;
         cft.transferFrom(msg.sender, address(this), cost);
+        _mint(to, amount);
+    }
+
+    function mint(address to, uint256 amount) external onlyMinter {
         _mint(to, amount);
     }
 }

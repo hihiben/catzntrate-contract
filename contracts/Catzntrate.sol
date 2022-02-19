@@ -255,7 +255,11 @@ contract Catzntrate {
         catzInfo.rewardDebt = 0;
     }
 
-    function pet(uint256 id, uint256 timestamp)
+    function pet(
+        uint256 id,
+        uint256 timestamp,
+        bool isAdventure
+    )
         external
         updateState(id, timestamp)
         whenState(id, State.Resting)
@@ -272,6 +276,11 @@ contract Catzntrate {
         } else {
             cft.mint(msg.sender, reward);
         }
+
+        if (isAdventure) {
+            // give user 1 cat food as reward
+            cf.mint(msg.sender, 1 ether);
+        }
     }
 
     function feed(
@@ -287,7 +296,7 @@ contract Catzntrate {
     {
         CatzInfo storage catzInfo = catzInfos[id];
         // uint256 limit = getHungerLimit(id);
-        uint256 point = ((amount / 10**18)) * 10;
+        uint256 point = ((amount / 1 ether)) * 10;
         require(catzInfo.hunger - point >= 0, "over hunger limit");
         cf.transferFrom(msg.sender, address(this), amount);
         // token convert to point
