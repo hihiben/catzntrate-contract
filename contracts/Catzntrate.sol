@@ -141,17 +141,18 @@ contract Catzntrate {
     }
 
     modifier updateState(uint256 id, uint256 timestamp) {
+        require(timestamp < block.timestamp, "no modifying future");
         if (catzInfos[id].lastRefillTime == 0) {
-            _initialize(id);
+            _initialize(id, timestamp);
         }
         _refillEnergy(id, timestamp);
         _updateState(id, timestamp);
         _;
     }
 
-    function _initialize(uint256 id) internal {
-        uint256 time = block.timestamp -
-            ((block.timestamp - _TIME_BASE) % _ENERGY_REFILL_TIME);
+    function _initialize(uint256 id, uint256 timestamp) internal {
+        uint256 time = timestamp -
+            ((timestamp - _TIME_BASE) % _ENERGY_REFILL_TIME);
         catzInfos[id].lastRefillTime = time;
         catzInfos[id].lastEatTime = time;
     }
@@ -507,7 +508,7 @@ contract Catzntrate {
 
     function _getLevelExp(uint256 id) internal view returns (uint256) {
         uint256 level = catzInfos[id].level.level;
-        return _EXP_BASE + ((_EXP_UP * level) / 2);
+        return _EXP_BASE + ((level / 2) * _EXP_UP);
     }
 
     function _dine(
