@@ -21,9 +21,7 @@ contract Catzntrate {
 
     struct CatzInfo {
         State state;
-        uint256 level;
-        uint256 exp;
-        uint256 skillPoint;
+        CatzLevel level;
         uint256 energy;
         uint256 hunger;
         bool rewardCgt;
@@ -32,6 +30,13 @@ contract Catzntrate {
         uint256 counter;
         uint256 rewardDebt;
         uint256 lastEatTime;
+        uint256 lastRefillTime;
+    }
+
+    struct CatzLevel {
+        uint256 level;
+        uint256 exp;
+        uint256 skillPoint;
     }
 
     struct CatzAttr {
@@ -47,8 +52,11 @@ contract Catzntrate {
     uint256 private constant _EXP_UP = 25;
     uint256 private constant _SKILL_POINTS_UP = 4;
     uint256 private constant _HUNGER_LIMIT = 100;
+    uint256 private constant _ENERGY_MAX = 50;
     uint256 private constant _NORMAL_EAT_TIME = 40 * 60;
     uint256 private constant _WORK_EAT_TIME = 5 * 60;
+    uint256 private constant _ENERGY_COST_TIME = 60;
+    uint256 private constant _ENERGY_REFILL_TIME = 24 * 60 * 60;
 
     // storage
     mapping(uint256 => CatzInfo) public catzInfos;
@@ -122,8 +130,22 @@ contract Catzntrate {
     }
 
     modifier updateState(uint256 id, uint256 timestamp) {
+        _refillEnergy(id, timestamp);
         _updateState(id, timestamp);
         _;
+    }
+
+    function _refillEnergy(uint256 id, uint256 timestamp) internal {
+        (, uint256 birthday) = catz.getCatz(id);
+        CatzInfo storage catzInfo = catzInfos[id];
+        uint256 timeInterval = timestamp - catzInfo.lastRefillTime;
+        if (catzInfo.lastRefillTime == 0) {
+            catzInfo.lastRefillTime = birthday;
+        } else if (timeInterval > _ENERGY_REFILL_TIME) {
+            catzInfo.energy = 0;
+            uint256 remain = timeInterval % _ENERGY_REFILL_TIME;
+            catzInfo.lastRefillTime = timestamp - remain;
+        }
     }
 
     constructor(
@@ -181,8 +203,8 @@ contract Catzntrate {
         (bytes32 gene, ) = catz.getCatz(id);
         return (
             catzInfo.state,
-            catzInfo.level,
-            catzInfo.skillPoint,
+            catzInfo.level.level,
+            catzInfo.level.skillPoint,
             catzInfo.energy,
             catzInfo.hunger,
             gene.gender()
@@ -205,6 +227,8 @@ contract Catzntrate {
         CatzInfo storage catzInfo = catzInfos[id];
         require(catzInfo.counterStart == 0, "Should be initial work");
         require(catzInfo.rewardDebt == 0, "Should be no reward debt");
+        require(catzInfo.energy < _ENERGY_MAX, "No energy");
+        require(catzInfo.hunger < getHungerLimit(id), "Hungry");
         catzInfo.state = State.Working;
         catzInfo.counterStart = timestamp;
         catzInfo.counter = workTime;
@@ -312,12 +336,12 @@ contract Catzntrate {
         isValidCatz(id)
         isOwner(id)
     {
-        CatzInfo storage catzInfo = catzInfos[id];
-        require(catzInfo.exp == _getLevelExp(id), "exp insufficient");
-        if (catzInfo.level < _LEVEL_MAX) {
-            catzInfo.level++;
-            catzInfo.exp = 0;
-            catzInfo.skillPoint += _SKILL_POINTS_UP;
+        CatzLevel storage catzLevel = catzInfos[id].level;
+        require(catzLevel.exp == _getLevelExp(id), "exp insufficient");
+        if (catzLevel.level < _LEVEL_MAX) {
+            catzLevel.level++;
+            catzLevel.exp = 0;
+            catzLevel.skillPoint += _SKILL_POINTS_UP;
         }
     }
 
@@ -335,7 +359,7 @@ contract Catzntrate {
         CatzInfo storage catzInfo = catzInfos[id];
         {
             uint256 sum = attr.eff + attr.cur + attr.luk + attr.vit;
-            catzInfo.skillPoint -= sum;
+            catzInfo.level.skillPoint -= sum;
         }
         catzInfo.attr.eff += attr.eff;
         catzInfo.attr.cur += attr.cur;
@@ -356,7 +380,7 @@ contract Catzntrate {
     {
         CatzInfo storage catzInfo = catzInfos[id];
         if (flag) {
-            require(catzInfo.level == 29, "Level too low");
+            require(catzInfo.level.level == 29, "Level too low");
         }
         catzInfo.rewardCgt = flag;
     }
@@ -371,11 +395,18 @@ contract Catzntrate {
             uint256 timeInterval = timestamp - catzInfo.counterStart;
             if (timeInterval > catzInfo.counter) {
                 (uint256 efficiency, , , ) = getStats(id);
-                uint256 workingTime = _dine(
+                uint256 energizedTime = (_ENERGY_MAX - catzInfo.energy) *
+                    _ENERGY_COST_TIME;
+                uint256 workingTime = energizedTime > catzInfo.counter
+                    ? catzInfo.counter
+                    : energizedTime;
+                workingTime = _dine(
                     id,
-                    catzInfo.counterStart + catzInfo.counter,
+                    catzInfo.counterStart + workingTime,
                     _WORK_EAT_TIME
                 );
+                catzInfo.energy += workingTime / _ENERGY_COST_TIME;
+
                 catzInfo.rewardDebt = _calReward(
                     efficiency,
                     workingTime,
@@ -387,7 +418,17 @@ contract Catzntrate {
                 catzInfo.counter = restTime;
                 catzInfo.state = State.Resting;
             } else {
-                _dine(id, timestamp, _WORK_EAT_TIME);
+                uint256 energizedTime = (_ENERGY_MAX - catzInfo.energy) *
+                    _ENERGY_COST_TIME;
+                uint256 workingTime = energizedTime > timeInterval
+                    ? timeInterval
+                    : energizedTime;
+                workingTime = _dine(
+                    id,
+                    catzInfo.counterStart + workingTime,
+                    _WORK_EAT_TIME
+                );
+                catzInfo.energy += workingTime / _ENERGY_COST_TIME;
             }
         } else if (catzInfo.state == State.Waiting) {
             _dine(id, timestamp, _NORMAL_EAT_TIME);
@@ -415,7 +456,7 @@ contract Catzntrate {
     }
 
     function _getLevelExp(uint256 id) internal view returns (uint256) {
-        uint256 level = catzInfos[id].level;
+        uint256 level = catzInfos[id].level.level;
         return _EXP_BASE + ((_EXP_UP * level) / 2);
     }
 
