@@ -1,7 +1,14 @@
 import { Wallet, BigNumber, Signer } from "ethers";
 import { expect } from "chai";
-import { deployments } from "hardhat";
-import { IERC20, Catzntrate, Catz, CatzBreed, CFT } from "../typechain";
+import { deployments, ethers } from "hardhat";
+import {
+  IERC20,
+  Catzntrate,
+  Catz,
+  CatzBreed,
+  CFT,
+  CatzFood,
+} from "../typechain";
 import {} from "./utils/constants";
 import { ether, getNewCatId } from "./utils/utils";
 
@@ -16,6 +23,7 @@ describe("CatzBreed", function () {
 
   let cft: CFT;
   let cgt: IERC20;
+  let cf: CatzFood;
   let catzntrate: Catzntrate;
   let catz: Catz;
   let catzBreed: CatzBreed;
@@ -29,27 +37,28 @@ describe("CatzBreed", function () {
 
       cft = await (await ethers.getContractFactory("CFT")).deploy();
       await cft.deployed();
-      console.log("cft", cft.address);
 
       cgt = await (await ethers.getContractFactory("CGT")).deploy();
       await cgt.deployed();
-      console.log("cgt", cgt.address);
+
+      const foodPrice = 2;
+      cf = await (
+        await ethers.getContractFactory("CatzFood")
+      ).deploy(cft.address, foodPrice);
+      await cf.deployed();
 
       catz = await (await ethers.getContractFactory("Catz")).deploy();
       await catz.deployed();
-      console.log("catz", catz.address);
 
       catzntrate = await (
         await ethers.getContractFactory("Catzntrate")
-      ).deploy(catz.address, cft.address, cgt.address);
+      ).deploy(catz.address, cft.address, cgt.address, cf.address);
       await catzntrate.deployed();
-      console.log("catzntrate", catzntrate.address);
 
       catzBreed = await (
         await ethers.getContractFactory("CatzBreed")
       ).deploy(cft.address, catz.address, catzntrate.address, 7, 0);
       await catzBreed.deployed();
-      console.log("catzBreed", catzBreed.address);
 
       await cft.addMinter(owner.address);
       await cft.mint(user.address, ether("5000"));
@@ -63,7 +72,6 @@ describe("CatzBreed", function () {
 
       tx = await catz.breedCatz(dadGene, user.address);
       dadCatId = await getNewCatId(tx);
-      console.log("AAAA");
     }
   );
 

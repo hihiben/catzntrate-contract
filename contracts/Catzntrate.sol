@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "./interfaces/ICatz.sol";
 import "./interfaces/ICFT.sol";
 import "./interfaces/ICGT.sol";
+import "./interfaces/ICatzFood.sol";
 import "./libs/LibGene.sol";
 
 contract Catzntrate {
@@ -54,6 +55,7 @@ contract Catzntrate {
     ICatz public catz;
     ICFT public cft;
     ICGT public cgt;
+    ICatzFood public cf;
     uint256 public workTime;
     uint256 public restTime;
     uint256 public effMultiplier;
@@ -127,11 +129,13 @@ contract Catzntrate {
     constructor(
         ICatz catz_,
         ICFT cft_,
-        ICGT cgt_
+        ICGT cgt_,
+        ICatzFood cf_
     ) {
         catz = catz_;
         cft = cft_;
         cgt = cgt_;
+        cf = cf_;
         effMultiplier = 1;
         curMultiplier = 1;
         lukMultiplier = 1;
@@ -282,8 +286,13 @@ contract Catzntrate {
         isOwner(id)
     {
         CatzInfo storage catzInfo = catzInfos[id];
-        catzInfo.hunger -= amount;
-        // feed
+        // uint256 limit = getHungerLimit(id);
+        uint256 point = ((amount / 10**18)) * 10;
+        require(catzInfo.hunger - point >= 0, "over hunger limit");
+        cf.transferFrom(msg.sender, address(this), amount);
+        // token convert to point
+        // 1 food recover 10 point of hunger
+        catzInfo.hunger -= point;
     }
 
     // Stats actions

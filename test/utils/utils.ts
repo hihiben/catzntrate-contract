@@ -131,3 +131,18 @@ export async function getNewCatId(receipt: any) {
   });
   return bytesData;
 }
+
+export async function increaseNextBlockTimeBy(interval: number) {
+  const blockNumber = await ethers.provider.getBlockNumber();
+  let block = null;
+  for (let i = 0; block == null; i++) {
+    block = await ethers.provider.getBlock(blockNumber - i);
+  }
+  // const jsonRpc = new ethers.providers.JsonRpcProvider();
+  // await jsonRpc.send("evm_setNextBlockTimestamp", [block.timestamp + interval]);
+  // hre.network.provider;
+  await hre.network.provider.send("evm_setNextBlockTimestamp", [
+    block.timestamp + interval,
+  ]);
+  await hre.network.provider.send("evm_mine");
+}
