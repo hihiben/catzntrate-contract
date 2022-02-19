@@ -295,7 +295,11 @@ contract Catzntrate {
         catzInfo.counterStart = timestamp;
     }
 
-    function workStop(uint256 id, uint256 timestamp)
+    function workStop(
+        uint256 id,
+        uint256 timestamp,
+        bool isAdventure
+    )
         external
         updateState(id, timestamp)
         whenStates(id, State.Working, State.Waiting)
@@ -303,6 +307,9 @@ contract Catzntrate {
         isOwner(id)
     {
         CatzInfo storage catzInfo = catzInfos[id];
+        if (catzInfo.state == State.Resting) {
+            _pet(id, isAdventure);
+        }
         catzInfo.state = State.Idle;
         catzInfo.counterStart = 0;
         catzInfo.counter = 0;
@@ -320,6 +327,10 @@ contract Catzntrate {
         isValidCatz(id)
         isOwner(id)
     {
+        _pet(id, isAdventure);
+    }
+
+    function _pet(uint256 id, bool isAdventure) internal {
         CatzInfo storage catzInfo = catzInfos[id];
         catzInfo.state = State.Petting;
         uint256 reward = catzInfo.rewardDebt;
