@@ -30,6 +30,7 @@ contract Catzntrate {
         uint256 counterStart;
         uint256 counter;
         uint256 rewardDebt;
+        uint256 lastEatTime;
     }
 
     struct CatzAttr {
@@ -44,6 +45,9 @@ contract Catzntrate {
     uint256 private constant _EXP_BASE = 50;
     uint256 private constant _EXP_UP = 25;
     uint256 private constant _SKILL_POINTS_UP = 4;
+    uint256 private constant _HUNGER_LIMIT = 100;
+    uint256 private constant _NORMAL_EAT_TIME = 40 * 60;
+    uint256 private constant _WORK_EAT_TIME = 5 * 60;
 
     // storage
     mapping(uint256 => CatzInfo) public catzInfos;
@@ -138,6 +142,55 @@ contract Catzntrate {
         restTime = 5 * 60;
     }
 
+    // Getters
+    function getStats(uint256 id)
+        public
+        view
+        returns (
+            uint256 efficiency,
+            uint256 curiosity,
+            uint256 luck,
+            uint256 vitality
+        )
+    {
+        (bytes32 gene, ) = catz.getCatz(id);
+        CatzAttr memory catzAttr = catzInfos[id].attr;
+        efficiency = gene.efficiency() + catzAttr.eff * effMultiplier;
+        curiosity = gene.curiosity() + catzAttr.cur * curMultiplier;
+        luck = gene.luck() + catzAttr.luk * lukMultiplier;
+        vitality = gene.vitality() + catzAttr.vit * vitMultiplier;
+    }
+
+    function getStates(uint256 id)
+        external
+        view
+        returns (
+            State state,
+            uint256 level,
+            uint256 skillPoint,
+            uint256 energy,
+            uint256 hunger,
+            bool gender
+        )
+    {
+        CatzInfo memory catzInfo = catzInfos[id];
+        (bytes32 gene, ) = catz.getCatz(id);
+        return (
+            catzInfo.state,
+            catzInfo.level,
+            catzInfo.skillPoint,
+            catzInfo.energy,
+            catzInfo.hunger,
+            gene.gender()
+        );
+    }
+
+    function getHungerLimit(uint256 id) internal view returns (uint256) {
+        (, , , uint256 vit) = getStats(id);
+        return vit + _HUNGER_LIMIT;
+    }
+
+    // Actions
     function workStart(uint256 id, uint256 timestamp)
         external
         updateState(id, timestamp)
@@ -217,14 +270,23 @@ contract Catzntrate {
         }
     }
 
-    function feed(uint256 id, uint256 timestamp)
+    function feed(
+        uint256 id,
+        uint256 timestamp,
+        uint256 amount
+    )
         external
         updateState(id, timestamp)
         whenNotState(id, State.Working)
         isValidCatz(id)
         isOwner(id)
-    {}
+    {
+        CatzInfo storage catzInfo = catzInfos[id];
+        catzInfo.hunger -= amount;
+        // feed
+    }
 
+    // Stats actions
     function levelUp(uint256 id, uint256 timestamp)
         external
         updateState(id, timestamp)
@@ -239,50 +301,6 @@ contract Catzntrate {
             catzInfo.exp = 0;
             catzInfo.skillPoint += _SKILL_POINTS_UP;
         }
-    }
-
-    function _getLevelExp(uint256 id) internal view returns (uint256) {
-        uint256 level = catzInfos[id].level;
-        return _EXP_BASE + ((_EXP_UP * level) / 2);
-    }
-
-    function getStats(uint256 id)
-        public
-        view
-        returns (
-            uint256 efficiency,
-            uint256 curiosity,
-            uint256 luck,
-            uint256 vitality
-        )
-    {
-        (bytes32 gene, ) = catz.getCatz(id);
-        CatzAttr memory catzAttr = catzInfos[id].attr;
-        efficiency = gene.efficiency() + catzAttr.eff * effMultiplier;
-        curiosity = gene.curiosity() + catzAttr.cur * curMultiplier;
-        luck = gene.luck() + catzAttr.luk * lukMultiplier;
-        vitality = gene.vitality() + catzAttr.vit * vitMultiplier;
-    }
-
-    function getStates(uint256 id)
-        external
-        view
-        returns (
-            State state,
-            uint256 level,
-            uint256 skillPoint,
-            uint256 energy,
-            uint256 hunger
-        )
-    {
-        CatzInfo memory catzInfo = catzInfos[id];
-        return (
-            catzInfo.state,
-            catzInfo.level,
-            catzInfo.skillPoint,
-            catzInfo.energy,
-            catzInfo.hunger
-        );
     }
 
     function addStats(
@@ -325,18 +343,24 @@ contract Catzntrate {
         catzInfo.rewardCgt = flag;
     }
 
+    // Internals
     function _updateState(uint256 id, uint256 timestamp) internal {
         CatzInfo storage catzInfo = catzInfos[id];
-
         if (catzInfo.state == State.Idle) {
-            return;
+            _dine(id, timestamp, _NORMAL_EAT_TIME);
         } else if (catzInfo.state == State.Working) {
             // Verify going to Resting or not
-            if (timestamp - catzInfo.counterStart > catzInfo.counter) {
+            uint256 timeInterval = timestamp - catzInfo.counterStart;
+            if (timeInterval > catzInfo.counter) {
                 (uint256 efficiency, , , ) = getStats(id);
+                uint256 workingTime = _dine(
+                    id,
+                    catzInfo.counterStart + catzInfo.counter,
+                    _WORK_EAT_TIME
+                );
                 catzInfo.rewardDebt = _calReward(
                     efficiency,
-                    catzInfo.counter,
+                    workingTime,
                     catzInfo.rewardCgt
                         ? rewardCgtMultiplier
                         : rewardCftMultiplier
@@ -344,23 +368,56 @@ contract Catzntrate {
                 catzInfo.counterStart += catzInfo.counter;
                 catzInfo.counter = restTime;
                 catzInfo.state = State.Resting;
+            } else {
+                _dine(id, timestamp, _WORK_EAT_TIME);
             }
-            return;
         } else if (catzInfo.state == State.Waiting) {
-            return;
+            _dine(id, timestamp, _NORMAL_EAT_TIME);
         } else if (catzInfo.state == State.Resting) {
-            return;
+            _dine(id, timestamp, _NORMAL_EAT_TIME);
         } else if (catzInfo.state == State.Petting) {
+            _dine(id, timestamp, _NORMAL_EAT_TIME);
             // Verify going to Working or not
-            if (timestamp - catzInfo.counterStart > catzInfo.counter) {
+            uint256 timeInterval = timestamp - catzInfo.counterStart;
+            if (timeInterval > catzInfo.counter) {
+                _dine(
+                    id,
+                    catzInfo.counterStart + catzInfo.counter,
+                    _NORMAL_EAT_TIME
+                );
                 catzInfo.counterStart += catzInfo.counter;
                 catzInfo.counter = workTime;
                 catzInfo.state = State.Working;
+            } else {
+                _dine(id, timestamp, _NORMAL_EAT_TIME);
             }
-            return;
         } else {
-            return;
+            revert("Invalid state");
         }
+    }
+
+    function _getLevelExp(uint256 id) internal view returns (uint256) {
+        uint256 level = catzInfos[id].level;
+        return _EXP_BASE + ((_EXP_UP * level) / 2);
+    }
+
+    function _dine(
+        uint256 id,
+        uint256 timestamp,
+        uint256 eatSpeed
+    ) internal returns (uint256 eatTime) {
+        CatzInfo storage catzInfo = catzInfos[id];
+        uint256 limit = getHungerLimit(id);
+        uint256 eat = (timestamp - catzInfo.lastEatTime) / eatSpeed;
+        uint256 food = limit - catzInfo.hunger;
+        if (food > eat) {
+            catzInfo.hunger += eat;
+            eatTime = eat * eatSpeed;
+        } else {
+            catzInfo.hunger = limit;
+            eatTime = food * eatSpeed;
+        }
+        catzInfo.lastEatTime = timestamp;
     }
 
     function _calReward(
