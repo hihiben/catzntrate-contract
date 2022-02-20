@@ -58,7 +58,8 @@ contract Catzntrate {
     uint256 private constant _EXP_UP = 10;
     uint256 private constant _EXP_PER_MIN = 2;
     uint256 private constant _SKILL_POINTS_UP = 4;
-    uint256 private constant _HUNGER_LIMIT_BASE = 100;
+    uint256 private constant _HUNGER_LIMIT = 100;
+    uint256 private constant _EAT_SPEED_BASE = 100;
     uint256 private constant _EARN_LIMIT_BASE = 50;
     uint256 private constant _EARN_LEVEL = 3;
     uint256 private constant _EARN_LIMIT_UP = 10;
@@ -235,9 +236,9 @@ contract Catzntrate {
         );
     }
 
-    function getHungerLimit(uint256 id) public view returns (uint256) {
+    function _getEatSpeed(uint256 id) internal view returns (uint256) {
         (, , , uint256 vit) = getStats(id);
-        return vit + _HUNGER_LIMIT_BASE;
+        return vit + _EAT_SPEED_BASE;
     }
 
     function getEarnLimit(address user) public view returns (uint256) {
@@ -262,7 +263,7 @@ contract Catzntrate {
         require(catzInfo.counterStart == 0, "Should be initial work");
         require(catzInfo.rewardDebt == 0, "Should be no reward debt");
         require(catzInfo.energy < _ENERGY_MAX, "No energy");
-        require(catzInfo.hunger < getHungerLimit(id), "Hungry");
+        require(catzInfo.hunger < _HUNGER_LIMIT, "Hungry");
         catzInfo.state = State.Working;
         catzInfo.counterStart = timestamp;
         catzInfo.counter = workTime;
@@ -537,16 +538,17 @@ contract Catzntrate {
         uint256 timestamp,
         uint256 eatSpeed
     ) internal returns (uint256 eatTime) {
-        uint256 finalSpeed = eatSpeed / speedUp;
+        uint256 finalSpeed = (eatSpeed * _getEatSpeed(id)) /
+            _EAT_SPEED_BASE /
+            speedUp;
         CatzInfo storage catzInfo = catzInfos[id];
-        uint256 limit = getHungerLimit(id);
         uint256 eat = (timestamp - catzInfo.lastEatTime) / finalSpeed;
-        uint256 food = limit - catzInfo.hunger;
+        uint256 food = _HUNGER_LIMIT - catzInfo.hunger;
         if (food > eat) {
             catzInfo.hunger += eat;
             eatTime = eat * finalSpeed;
         } else {
-            catzInfo.hunger = limit;
+            catzInfo.hunger = _HUNGER_LIMIT;
             eatTime = food * finalSpeed;
         }
         catzInfo.lastEatTime = timestamp;
