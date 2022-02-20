@@ -1,7 +1,7 @@
 import { Wallet, constants, BigNumber } from "ethers";
 import { expect } from "chai";
 import { deployments, ethers } from "hardhat";
-import { IERC20, Catzntrate, Catz, CFT, CatzFood } from "../typechain";
+import { Catzntrate, Catz, CFT, CGT, CatzFood } from "../typechain";
 import { ether, getNewCatId, increaseNextBlockTimeBy } from "./utils/utils";
 
 describe("Catzntrate", function () {
@@ -9,11 +9,11 @@ describe("Catzntrate", function () {
   let user: Wallet;
 
   let cft: CFT;
-  let cgt: IERC20;
+  let cgt: CGT;
   let cf: CatzFood;
   let catzntrate: Catzntrate;
   let catz: Catz;
-  let catId: number;
+  let catId: any;
 
   const setupTest = deployments.createFixture(
     async ({ deployments, ethers }, options) => {
@@ -41,6 +41,7 @@ describe("Catzntrate", function () {
 
       await cf.addMinter(catzntrate.address);
       await cft.addMinter(catzntrate.address);
+      await cgt.addMinter(catzntrate.address);
       await cft.addMinter(owner.address);
       await cft.mint(user.address, ether("5000"));
 
@@ -50,7 +51,7 @@ describe("Catzntrate", function () {
       const gene =
         "0x0203040500000000000000000000000000000000000000000000000000000000";
       const tx = await catz.breedCatz(gene, user.address);
-      catId = await getNewCatId(tx);
+      catId = (await getNewCatId(tx)).toString();
     }
   );
 
@@ -61,48 +62,135 @@ describe("Catzntrate", function () {
     await setupTest();
   });
 
-  describe("pet", function () {
-    it("pet and get reward", async function () {
-      const catzFoodUserBefore = await cf.balanceOf(user.address);
+  describe("energy system", function () {
+    let energyStart: BigNumber;
+    let energyEnd: BigNumber;
 
-      await cf.connect(user).approve(catzntrate.address, constants.MaxUint256);
-      let now = BigNumber.from(
-        (await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))
-          .timestamp
-      );
-
-      await catzntrate.connect(user).workStart(catId.toString(), now);
+    it("should not consume energy when idle", async function () {
+      await catzntrate.connect(user).poke(catId);
+      const stateStart = await catzntrate.callStatic.getStates(catId);
+      const energyStart = stateStart[3];
       await increaseNextBlockTimeBy(1 * 60 * 60);
-
-      now = BigNumber.from(
-        (await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))
-          .timestamp
-      );
-
-      await catzntrate.connect(user).pet(catId.toString(), now, true);
-      const catzFoodUserAfter = await cf.balanceOf(user.address);
-      expect(catzFoodUserAfter.sub(catzFoodUserBefore)).to.be.eq(ether("1"));
+      await catzntrate.connect(user).poke(catId);
+      const stateEnd = await catzntrate.callStatic.getStates(catId);
+      const energyEnd = stateEnd[3];
+      expect(energyStart).to.be.eq(energyEnd);
     });
-    it("pet without reward", async function () {
-      const catzFoodUserBefore = await cf.balanceOf(user.address);
 
-      await cf.connect(user).approve(catzntrate.address, constants.MaxUint256);
-      let now = BigNumber.from(
-        (await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))
-          .timestamp
-      );
+    describe("Working", function () {
+      beforeEach(async function () {
+        let now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+        await catzntrate.connect(user).workStart(catId, now);
+        const stateStart = await catzntrate.callStatic.getStates(catId);
+        energyStart = stateStart[3];
+      });
 
-      await catzntrate.connect(user).workStart(catId.toString(), now);
-      await increaseNextBlockTimeBy(1 * 60 * 60);
+      it.only("should consume energy when working", async function () {
+        await increaseNextBlockTimeBy(10 * 60);
+        await catzntrate.connect(user).poke(catId);
+        const stateEnd = await catzntrate.callStatic.getStates(catId);
+        energyEnd = stateEnd[3];
+        //expect(energyEnd.sub(energyStart)).to.be.eq(10);
+      });
 
-      now = BigNumber.from(
-        (await ethers.provider.getBlock(await ethers.provider.getBlockNumber()))
-          .timestamp
-      );
+      it("should not consume energy when pause", async function () {
+        let now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+        await increaseNextBlockTimeBy(10 * 60);
+        await catzntrate.connect(user).workPause(catId, now.add(10 * 60));
+        const stateStart = await catzntrate.callStatic.getStates(catId);
+        energyStart = stateStart[3];
+        await increaseNextBlockTimeBy(10 * 60);
+        await catzntrate.connect(user).poke(catId);
+        const stateEnd = await catzntrate.callStatic.getStates(catId);
+        energyEnd = stateEnd[3];
+        expect(energyEnd).to.be.eq(energyStart);
+      });
 
-      await catzntrate.connect(user).pet(catId.toString(), now, false);
-      const catzFoodUserAfter = await cf.balanceOf(user.address);
-      expect(catzFoodUserAfter).to.be.eq(catzFoodUserBefore);
+      it("should not consume energy when resting", async function () {});
+      it("should not consume energy when run out of food", async function () {});
+    });
+  });
+
+  describe("food system", function () {
+    it("should slowly increase hunger when idle", async function () {});
+
+    describe("Working", function () {
+      it("should increase hunger when working", async function () {});
+      it("should slowly increase hunger when pause", async function () {});
+      it("should slowly increase hunger when resting", async function () {});
+      it("should slowly increase hunger when run out of energy", async function () {});
+    });
+  });
+
+  describe("pet", function () {
+    describe("no adventure", function () {
+      it("pet and get reward", async function () {
+        const catzFoodUserBefore = await cf.balanceOf(user.address);
+        let now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+
+        await catzntrate.connect(user).workStart(catId, now);
+        await increaseNextBlockTimeBy(1 * 60 * 60);
+
+        now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+
+        await catzntrate.connect(user).pet(catId, now, true);
+        const catzFoodUserAfter = await cf.balanceOf(user.address);
+        expect(catzFoodUserAfter.sub(catzFoodUserBefore)).to.be.eq(ether("1"));
+      });
+
+      it("pet without reward", async function () {
+        const catzFoodUserBefore = await cf.balanceOf(user.address);
+
+        await cf
+          .connect(user)
+          .approve(catzntrate.address, constants.MaxUint256);
+        let now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+
+        await catzntrate.connect(user).workStart(catId, now);
+        await increaseNextBlockTimeBy(1 * 60 * 60);
+
+        now = BigNumber.from(
+          (
+            await ethers.provider.getBlock(
+              await ethers.provider.getBlockNumber()
+            )
+          ).timestamp
+        );
+
+        await catzntrate.connect(user).pet(catId, now, false);
+        const catzFoodUserAfter = await cf.balanceOf(user.address);
+        expect(catzFoodUserAfter).to.be.eq(catzFoodUserBefore);
+      });
     });
   });
 });
