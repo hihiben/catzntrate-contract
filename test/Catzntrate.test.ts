@@ -96,7 +96,7 @@ describe("Catzntrate", function () {
         await catzntrate.connect(user).poke(catId);
         const stateEnd = await catzntrate.callStatic.getStates(catId);
         energyEnd = stateEnd[3];
-        //expect(energyEnd.sub(energyStart)).to.be.eq(10);
+        expect(energyEnd.sub(energyStart)).to.be.eq(10);
       });
 
       it("should not consume energy when pause", async function () {

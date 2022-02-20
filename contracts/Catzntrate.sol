@@ -7,8 +7,6 @@ import "./interfaces/ICGT.sol";
 import "./interfaces/ICatzFood.sol";
 import "./libs/LibGene.sol";
 
-import "hardhat/console.sol";
-
 contract Catzntrate {
     using LibGene for bytes32;
 
@@ -545,11 +543,11 @@ contract Catzntrate {
             _EAT_SPEED_BASE /
             speedUp;
         CatzInfo storage catzInfo = catzInfos[id];
-        uint256 eat = (timestamp - catzInfo.lastEatTime) / finalSpeed;
+        eatTime = timestamp - catzInfo.lastEatTime;
+        uint256 eat = eatTime / finalSpeed;
         uint256 food = _HUNGER_LIMIT - catzInfo.hunger;
         if (food > eat) {
             catzInfo.hunger += eat;
-            eatTime = eat * finalSpeed;
         } else {
             catzInfo.hunger = _HUNGER_LIMIT;
             eatTime = food * finalSpeed;
