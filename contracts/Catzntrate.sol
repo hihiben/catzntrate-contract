@@ -56,6 +56,7 @@ contract Catzntrate {
     uint256 private constant _LEVEL_MAX = 30;
     uint256 private constant _EXP_BASE = 50;
     uint256 private constant _EXP_UP = 10;
+    uint256 private constant _EXP_PER_MIN = 2;
     uint256 private constant _SKILL_POINTS_UP = 4;
     uint256 private constant _HUNGER_LIMIT_BASE = 100;
     uint256 private constant _EARN_LIMIT_BASE = 50;
@@ -465,6 +466,12 @@ contract Catzntrate {
                     _WORK_EAT_TIME
                 );
                 catzInfo.energy += workingTime / _ENERGY_COST_TIME;
+                {
+                    uint256 exp = (workingTime * _EXP_PER_MIN) / 60;
+                    uint256 toLimit = _getLevelExp(id) - catzInfo.level.exp;
+                    exp = exp < toLimit ? exp : toLimit;
+                    catzInfo.level.exp += exp;
+                }
 
                 catzInfo.rewardDebt = _calReward(
                     efficiency,
@@ -488,6 +495,12 @@ contract Catzntrate {
                     _WORK_EAT_TIME
                 );
                 catzInfo.energy += workingTime / _ENERGY_COST_TIME;
+                {
+                    uint256 exp = (workingTime * _EXP_PER_MIN) / 60;
+                    uint256 toLimit = _getLevelExp(id) - catzInfo.level.exp;
+                    exp = exp < toLimit ? exp : toLimit;
+                    catzInfo.level.exp += exp;
+                }
             }
         } else if (catzInfo.state == State.Waiting) {
             _dine(id, timestamp, _NORMAL_EAT_TIME);
