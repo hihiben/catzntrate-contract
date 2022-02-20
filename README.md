@@ -1,6 +1,9 @@
 # Catzntrate
 
 This project is a project for ETHDenver 2022 hackathon. Let's concentrate and buidl!
+Catz'ntrate is the application to help you concentrate on a task. Whether you want to learn a new language, a new skill, focus on your coding, or just finish your homework, catzentrate helps to gamify completing your task by removing external distractions to focus on being productive.
+
+Owners of the Catzntrate nft pets will be able to earn the CFT token by activating the concentrate mode and focusing on a task for 25 minutes per round. Each nft pet will have enough energy per day for 2 rounds, or 60 minutes on concentration. 
 
 ## Structure
 
