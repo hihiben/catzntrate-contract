@@ -11,4 +11,6 @@ interface ICFT is IERC20 {
     function removeMinter(address minter) external;
 
     function mint(address to, uint256 amount) external;
+
+    function burn(address from, uint256 amount) external;
 }

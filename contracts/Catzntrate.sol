@@ -55,7 +55,7 @@ contract Catzntrate {
     uint256 private constant _TIME_BASE = 1645261200;
     uint256 private constant _LEVEL_MAX = 30;
     uint256 private constant _EXP_BASE = 50;
-    uint256 private constant _EXP_UP = 25;
+    uint256 private constant _EXP_UP = 10;
     uint256 private constant _SKILL_POINTS_UP = 4;
     uint256 private constant _HUNGER_LIMIT_BASE = 100;
     uint256 private constant _EARN_LIMIT_BASE = 50;
@@ -66,6 +66,8 @@ contract Catzntrate {
     uint256 private constant _WORK_EAT_TIME = 5 * 60;
     uint256 private constant _ENERGY_COST_TIME = 60;
     uint256 private constant _ENERGY_REFILL_TIME = 24 * 60 * 60;
+    uint256 private constant _COST_BASE = 3 ether;
+    uint256 private constant _COST_UP = 0.1 ether;
 
     // storage
     mapping(uint256 => CatzInfo) public catzInfos;
@@ -141,7 +143,7 @@ contract Catzntrate {
     }
 
     modifier updateState(uint256 id, uint256 timestamp) {
-        require(timestamp < block.timestamp, "no modifying future");
+        require(timestamp <= block.timestamp, "no modifying future");
         if (catzInfos[id].lastRefillTime == 0) {
             _initialize(id, timestamp);
         }
@@ -383,13 +385,19 @@ contract Catzntrate {
     {
         CatzLevel storage catzLevel = catzInfos[id].level;
         require(catzLevel.exp == _getLevelExp(id), "exp insufficient");
-        if (catzLevel.level < _LEVEL_MAX) {
+        uint256 level = catzLevel.level;
+        if (level < _LEVEL_MAX) {
             catzLevel.level++;
             catzLevel.exp = 0;
             catzLevel.skillPoint += _SKILL_POINTS_UP;
             // Level up user
             userInfos[msg.sender].level++;
+            cft.burn(msg.sender, _getLevelUpCost(level));
         }
+    }
+
+    function _getLevelUpCost(uint256 level) internal pure returns (uint256) {
+        return _COST_BASE + _COST_UP * level;
     }
 
     function addStats(
@@ -508,7 +516,7 @@ contract Catzntrate {
 
     function _getLevelExp(uint256 id) internal view returns (uint256) {
         uint256 level = catzInfos[id].level.level;
-        return _EXP_BASE + ((level / 2) * _EXP_UP);
+        return _EXP_BASE + (level * _EXP_UP);
     }
 
     function _dine(
