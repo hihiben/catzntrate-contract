@@ -79,4 +79,9 @@ contract Catz is ERC721, Ownable {
     function isValidCatz(uint256 id) public view returns (bool) {
         return _exists(id);
     }
+
+    function _baseURI() internal pure override returns (string memory) {
+        return
+            "https://raw.githubusercontent.com/hihiben/catzntrate-contract/develop/images/";
+    }
 }
