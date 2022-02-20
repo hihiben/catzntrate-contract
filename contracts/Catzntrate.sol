@@ -7,6 +7,8 @@ import "./interfaces/ICGT.sol";
 import "./interfaces/ICatzFood.sol";
 import "./libs/LibGene.sol";
 
+import "hardhat/console.sol";
+
 contract Catzntrate {
     using LibGene for bytes32;
 
@@ -63,6 +65,7 @@ contract Catzntrate {
     uint256 private constant _EARN_LIMIT_BASE = 50;
     uint256 private constant _EARN_LEVEL = 3;
     uint256 private constant _EARN_LIMIT_UP = 10;
+    uint256 private constant _EARN_K = 40000000000000;
     uint256 private constant _ENERGY_MAX = 50;
     uint256 private constant _NORMAL_EAT_TIME = 40 * 60;
     uint256 private constant _WORK_EAT_TIME = 5 * 60;
@@ -559,6 +562,6 @@ contract Catzntrate {
         uint256 time,
         uint256 multiplier
     ) internal pure returns (uint256) {
-        return eff * time * multiplier;
+        return eff * time * multiplier * _EARN_K;
     }
 }
